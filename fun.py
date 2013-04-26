@@ -136,6 +136,36 @@ def direction_to_coordinates(direction):
         x = -1
     return x, y
 
+class Handler(object):
+    def __init__(self, board, player):
+        self.board = board
+        self.player = player
+
+
+class Move(Handler):
+    def can_handle(self, parts):
+        return parts[0] in ['n', 's', 'w', 'e']
+
+    def handle(self, parts):
+        x, y = direction_to_coordinates(parts[0])
+        self.player.move_relative(self.board, x, y)
+
+
+class Quit(Handler):
+    def can_handle(self, parts):
+        return parts[0] == 'q'
+
+    def handle(self, parts):
+        sys.exit(0)
+
+
+class Pickup(Handler):
+    def can_handle(self, parts):
+        return parts[0] == '.'
+
+    def handle(self, parts):
+        pass
+
 
 if __name__=='__main__':
     board = GameBoard(10, 10)
@@ -149,8 +179,10 @@ if __name__=='__main__':
     coins = [Item("$") for i in range(10)]
     randomly_place_entities(board, coins)
 
+    player = players[0]
+    handlers = [Move(board, player), Quit(board, player)]
+
     while True:
-        player = players[0]
         board.dump()
         for i, item in enumerate(player.inventory):
             print "%s. %s" % (chr(ord('a')+i), str(item)),
@@ -158,11 +190,6 @@ if __name__=='__main__':
 
         inp = raw_input("$ ")
         parts = inp.split(' ')
-        cmd = parts[0]
-        if cmd == 'q':
-            sys.exit(1)
-        x, y = direction_to_coordinates(cmd)
-        if x == 0 and y == 0:
-            continue
-
-        player.move_relative(board, x, y)
+        for handler in handlers:
+            if handler.can_handle(parts):
+                handler.handle(parts)
