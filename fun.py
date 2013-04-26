@@ -3,12 +3,22 @@ import sys
 
 
 class Square(object):
-    def __init__(self):
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
         self.pile = []
         self.player = None
 
     def is_empty(self):
         return len(self.pile) == 0 and self.player == None
+
+    def pick_from_pile(self, index):
+        # We'll need some locking on this if
+        # we're ever multiplayer.
+        return self.pile.pop(index)
+
+    def __str__(self):
+        return "(%d, %d)" % (self.x, self.y)
 
 
 class GameBoard(object):
@@ -17,7 +27,7 @@ class GameBoard(object):
         self.y = y
         self.grid = []
         for i in range(y):
-            row = [Square() for j in range(x)]
+            row = [Square(j, i) for j in range(x)]
             self.grid.append(row)
 
     def get(self, x, y):
@@ -25,6 +35,9 @@ class GameBoard(object):
 
     def add_to_pile(self, x, y, entity):
         self.grid[y][x].pile.append(entity)
+
+    def remove(self, x, y, index):
+        pass
 
     def set_player(self, x, y, player):
         self.grid[y][x].player = player
@@ -49,6 +62,10 @@ class GameBoard(object):
                 print "%3s" % tag,
             print
 
+    def invalid_square(self, x, y):
+        return x >= self.x or x < 0 or \
+               y >= self.y or y < 0
+
 
 class Entity(object):
     def __init__(self, tag):
@@ -62,34 +79,9 @@ class Entity(object):
         self.y = y
         # How to add to board left to derived class.
 
-    def move_relative(self, board, _x, _y):
-        if self.x + _x >= board.x or \
-           self.x + _x < 0 or \
-           self.y + _y >= board.y or \
-           self.y + _y < 0:
-            return
-        board.set_player(self.x, self.y, None)
-        new_x = self.x + _x
-        new_y = self.y + _y
-        pile = board.get(new_x, new_y).pile
-        permitted = True
-        if pile:
-            for item in pile:
-                ok = item.walked_on(board, self)
-                permitted = permitted and ok
-        if permitted:
-            self.x = new_x
-            self.y = new_y
-            board.set_player(self.x, self.y, self)
-
     def walked_on(self, board, other):
         # Something walked on me.
-        # By default, they now carry us.
         return True
-
-    def pick_up(self, board, index):
-        # board.set(self.x, self.y, [])
-        other.carry(self)
 
     def carry(self, other):
         self.inventory.append(other)
@@ -111,6 +103,23 @@ class Player(Entity):
    def placeat(self, board, x, y):
         super(Player, self).placeat(board, x, y)
         board.set_player(x, y, self)
+
+   def move_relative(self, board, _x, _y):
+        new_x = self.x + _x
+        new_y = self.y + _y
+        if board.invalid_square(new_x, new_y):
+            return
+        board.set_player(self.x, self.y, None)
+        pile = board.get(new_x, new_y).pile
+        permitted = True
+        if pile:
+            for item in pile:
+                ok = item.walked_on(board, self)
+                permitted = permitted and ok
+        if permitted:
+            self.x = new_x
+            self.y = new_y
+            board.set_player(self.x, self.y, self)
 
 
 def randomly_place_entities(board, entities):
@@ -135,6 +144,7 @@ def direction_to_coordinates(direction):
     if direction == 'w':
         x = -1
     return x, y
+
 
 class Handler(object):
     def __init__(self, board, player):
@@ -164,7 +174,17 @@ class Pickup(Handler):
         return parts[0] == '.'
 
     def handle(self, parts):
-        pass
+        # . <direction>
+        # maybe use argparse for this stuff?
+        x = self.player.x
+        y = self.player.y
+        if len(parts) > 1:
+            _x, _y = direction_to_coordinates(parts[1])
+            x += _x
+            y += _y
+        square = self.board.get(x, y)
+        item = square.pick_from_pile(0)
+        self.player.carry(item)
 
 
 if __name__=='__main__':
@@ -180,12 +200,13 @@ if __name__=='__main__':
     randomly_place_entities(board, coins)
 
     player = players[0]
-    handlers = [Move(board, player), Quit(board, player)]
+    handlers = [Move(board, player), Quit(board, player),
+                Pickup(board, player)]
 
     while True:
         board.dump()
         for i, item in enumerate(player.inventory):
-            print "%s. %s" % (chr(ord('a')+i), str(item)),
+            print "%s. %s" % (i+1, str(item)),
         print
 
         inp = raw_input("$ ")
@@ -193,3 +214,5 @@ if __name__=='__main__':
         for handler in handlers:
             if handler.can_handle(parts):
                 handler.handle(parts)
+                continue
+        print "Invalid command"
