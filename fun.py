@@ -15,7 +15,13 @@ class Square(object):
     def pick_from_pile(self, index):
         # We'll need some locking on this if
         # we're ever multiplayer.
+        if index < 0 or index >= len(self.pile):
+            return None
+
         return self.pile.pop(index)
+
+    def add_to_pile(self, entity):
+        self.pile.append(entity)
 
     def __str__(self):
         return "(%d, %d)" % (self.x, self.y)
@@ -32,12 +38,6 @@ class GameBoard(object):
 
     def get(self, x, y):
         return self.grid[y][x]
-
-    def add_to_pile(self, x, y, entity):
-        self.grid[y][x].pile.append(entity)
-
-    def remove(self, x, y, index):
-        pass
 
     def set_player(self, x, y, player):
         self.grid[y][x].player = player
@@ -86,6 +86,12 @@ class Entity(object):
     def carry(self, other):
         self.inventory.append(other)
 
+    def drop(self, index):
+        pack = self.inventory
+        if index < 0 or index >= len(pack):
+            return None
+        return pack.pop(index)
+       
     def dump(self):
         return self.tag
 
@@ -96,7 +102,7 @@ class Entity(object):
 class Item(Entity):
     def placeat(self, board, x, y):
         super(Item, self).placeat(board, x, y)
-        board.add_to_pile(x, y, self)
+        board.get(x, y).add_to_pile(self)
 
 
 class Player(Entity):
@@ -184,7 +190,25 @@ class Pickup(Handler):
             y += _y
         square = self.board.get(x, y)
         item = square.pick_from_pile(0)
-        self.player.carry(item)
+        if item:
+            self.player.carry(item)
+
+
+class Drop(Handler):
+    def can_handle(self, parts):
+        return parts[0] == 'd'
+
+    def handle(self, parts):
+        # d <index>
+        index = 0
+        if len(parts) > 1:
+            index = int(parts[1]) - 1 
+        entity = self.player.drop(index)
+        if not entity:
+            return
+
+        square = self.board.get(self.player.x, self.player.y)
+        item = square.add_to_pile(entity)
 
 
 if __name__=='__main__':
@@ -200,8 +224,8 @@ if __name__=='__main__':
     randomly_place_entities(board, coins)
 
     player = players[0]
-    handlers = [Move(board, player), Quit(board, player),
-                Pickup(board, player)]
+    cmds = [Move, Quit, Pickup, Drop]
+    handlers = [cmd(board, player) for cmd in cmds]
 
     while True:
         board.dump()
@@ -211,8 +235,11 @@ if __name__=='__main__':
 
         inp = raw_input("$ ")
         parts = inp.split(' ')
+        handled = False
         for handler in handlers:
             if handler.can_handle(parts):
                 handler.handle(parts)
-                continue
-        print "Invalid command"
+                handled = True
+                break
+        if not handled:
+            print "Invalid command"
