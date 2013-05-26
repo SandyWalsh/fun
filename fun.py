@@ -47,12 +47,14 @@ class GameBoard(object):
         for i in range(10):
             print "%3d" % i,
         print
+        player = None
         for i, y in enumerate(self.grid):
             print "%3d" % i,
             for x in y:
                 tag = ' . '
                 if x.player:
                     tag = x.player.dump()
+                    player = x.player
                 else:
                     pile = x.pile
                     if len(pile) == 1:
@@ -61,6 +63,12 @@ class GameBoard(object):
                         tag = '^'
                 print "%3s" % tag,
             print
+
+        player_cell = self.get(player.x, player.y)
+        print "Here:",
+        for i, item in enumerate(player_cell.pile):
+            print "%d. %s" % (i+1, item.dump()),
+        print
 
     def invalid_square(self, x, y):
         return x >= self.x or x < 0 or \
@@ -91,7 +99,7 @@ class Entity(object):
         if index < 0 or index >= len(pack):
             return None
         return pack.pop(index)
-       
+
     def dump(self):
         return self.tag
 
@@ -202,7 +210,7 @@ class Drop(Handler):
         # d <index>
         index = 0
         if len(parts) > 1:
-            index = int(parts[1]) - 1 
+            index = int(parts[1]) - 1
         entity = self.player.drop(index)
         if not entity:
             return
@@ -229,6 +237,7 @@ if __name__=='__main__':
 
     while True:
         board.dump()
+        print "Inv:",
         for i, item in enumerate(player.inventory):
             print "%s. %s" % (i+1, str(item)),
         print
